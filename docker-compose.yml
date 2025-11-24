@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  mqtt-filter:
+    build: .
+    container_name: meshtastic-mqtt-filter
+    restart: unless-stopped
+    environment:
+      # Override these in a .env file or docker-compose.override.yml
+      - MQTT_BROKER=${MQTT_BROKER:-mqtt.patinhas.da4.org}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+      - MQTT_USERNAME=${MQTT_USERNAME:-meshdev}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-large4cats}
+      - INPUT_TOPIC=${INPUT_TOPIC:-msh/US/NY/#}
+      - OUTPUT_TOPIC=${OUTPUT_TOPIC:-filtered/msh/US/NY}
+    command: >
+      --broker ${MQTT_BROKER:-mqtt.patinhas.da4.org}
+      --port ${MQTT_PORT:-1883}
+      --username ${MQTT_USERNAME:-meshdev}
+      --password ${MQTT_PASSWORD:-large4cats}
+      --input-topic "${INPUT_TOPIC:-msh/US/NY/#}"
+      --output-topic "${OUTPUT_TOPIC:-filtered/msh/US/NY}"
+      --show-stats
+    # For debugging, uncomment the following:
+    # command: >
+    #   --broker ${MQTT_BROKER:-mqtt.patinhas.da4.org}
+    #   --port ${MQTT_PORT:-1883}
+    #   --username ${MQTT_USERNAME:-meshdev}
+    #   --password ${MQTT_PASSWORD:-large4cats}
+    #   --input-topic "${INPUT_TOPIC:-msh/US/NY/#}"
+    #   --output-topic "${OUTPUT_TOPIC:-filtered/msh/US/NY}"
+    #   --show-stats
+    #   --debug
