@@ -10,14 +10,14 @@ services:
       - MQTT_BROKER=${MQTT_BROKER:-mqtt.patinhas.da4.org}
       - MQTT_PORT=${MQTT_PORT:-1883}
       - MQTT_USERNAME=${MQTT_USERNAME:-meshdev}
-      - MQTT_PASSWORD=${MQTT_PASSWORD:-large4cats}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-replaceme}
       - INPUT_TOPIC=${INPUT_TOPIC:-msh/US/NY/#}
       - OUTPUT_TOPIC=${OUTPUT_TOPIC:-filtered/msh/US/NY}
     command: >
       --broker ${MQTT_BROKER:-mqtt.patinhas.da4.org}
       --port ${MQTT_PORT:-1883}
       --username ${MQTT_USERNAME:-meshdev}
-      --password ${MQTT_PASSWORD:-large4cats}
+      --password ${MQTT_PASSWORD:-replaceme}
       --input-topic "${INPUT_TOPIC:-msh/US/NY/#}"
       --output-topic "${OUTPUT_TOPIC:-filtered/msh/US/NY}"
       --show-stats
@@ -26,7 +26,7 @@ services:
     #   --broker ${MQTT_BROKER:-mqtt.patinhas.da4.org}
     #   --port ${MQTT_PORT:-1883}
     #   --username ${MQTT_USERNAME:-meshdev}
-    #   --password ${MQTT_PASSWORD:-large4cats}
+    #   --password ${MQTT_PASSWORD:-replaceme}
     #   --input-topic "${INPUT_TOPIC:-msh/US/NY/#}"
     #   --output-topic "${OUTPUT_TOPIC:-filtered/msh/US/NY}"
     #   --show-stats
