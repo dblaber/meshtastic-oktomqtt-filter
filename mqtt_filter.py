@@ -41,7 +41,8 @@ class MeshtasticMQTTFilter:
         client_id: Optional[str] = "meshtastic_filter",
         show_stats: bool = False,
         decrypt_default: bool = True,
-        channel_keys: Optional[List[str]] = None
+        channel_keys: Optional[List[str]] = None,
+        reject_log_file: Optional[str] = None
     ):
         self.broker = broker
         self.port = port
@@ -50,6 +51,25 @@ class MeshtasticMQTTFilter:
         self.username = username
         self.password = password
         self.show_stats = show_stats
+        self.reject_log_file = reject_log_file
+
+        # Set up reject logger if file specified
+        self.reject_logger = None
+        if reject_log_file:
+            self.reject_logger = logging.getLogger('reject_logger')
+            self.reject_logger.setLevel(logging.INFO)
+            # Remove any existing handlers
+            self.reject_logger.handlers = []
+            # Create file handler
+            fh = logging.FileHandler(reject_log_file)
+            fh.setLevel(logging.INFO)
+            # Create formatter
+            formatter = logging.Formatter('%(asctime)s - %(message)s')
+            fh.setFormatter(formatter)
+            self.reject_logger.addHandler(fh)
+            # Don't propagate to root logger
+            self.reject_logger.propagate = False
+            logger.info(f"Reject logging enabled: {reject_log_file}")
 
         # Encryption keys
         self.keys = []
@@ -147,7 +167,7 @@ class MeshtasticMQTTFilter:
             # Check if message should be forwarded to MQTT
             # Messages are ok to MQTT if they're on a public channel (channel_id == 0 or PKI_ENCRYPTED not set)
             # Or if they explicitly have want_response which indicates public sharing
-            is_ok_to_mqtt = self._check_ok_to_mqtt(envelope, packet)
+            is_ok_to_mqtt = self._check_ok_to_mqtt(envelope, packet, msg.topic)
 
             if is_ok_to_mqtt:
                 self.stats['forwarded'] += 1
@@ -309,7 +329,55 @@ class MeshtasticMQTTFilter:
         logger.debug(f"Failed to decrypt packet from 0x{from_id:08x} with any available key")
         return False
 
-    def _check_ok_to_mqtt(self, envelope: mqtt_pb2.ServiceEnvelope, packet) -> bool:
+    def _log_rejected_packet(self, reason: str, envelope: mqtt_pb2.ServiceEnvelope, packet, topic: str):
+        """Log details of rejected packets to file"""
+        if not self.reject_logger:
+            return
+
+        from_id = getattr(packet, 'from', 0)
+        to_id = getattr(packet, 'to', 0)
+
+        # Build log entry
+        log_parts = [
+            f"REJECTED - Reason: {reason}",
+            f"From: !{from_id:08x}",
+            f"To: !{to_id:08x}",
+            f"Topic: {topic}",
+            f"Channel: {envelope.channel_id}",
+            f"Gateway: {envelope.gateway_id}",
+            f"Packet ID: {packet.id}",
+        ]
+
+        # Add decoded information if available
+        if packet.HasField('decoded'):
+            portnum_name = portnums_pb2.PortNum.Name(packet.decoded.portnum) if packet.decoded.portnum else "UNKNOWN"
+            log_parts.append(f"PortNum: {portnum_name}")
+
+            if packet.decoded.HasField('bitfield'):
+                log_parts.append(f"Bitfield: 0x{packet.decoded.bitfield:02x}")
+
+            # Try to extract text payload
+            if packet.decoded.portnum == portnums_pb2.PortNum.TEXT_MESSAGE_APP:
+                try:
+                    text = packet.decoded.payload.decode('utf-8')
+                    log_parts.append(f"Text: {text}")
+                except:
+                    pass
+
+            # Try to extract telemetry data
+            if packet.decoded.portnum == portnums_pb2.PortNum.TELEMETRY_APP:
+                try:
+                    telemetry = telemetry_pb2.Telemetry()
+                    telemetry.ParseFromString(packet.decoded.payload)
+                    log_parts.append(f"Telemetry: {telemetry}")
+                except:
+                    pass
+        else:
+            log_parts.append("Status: Still encrypted (decryption failed)")
+
+        self.reject_logger.info(" | ".join(log_parts))
+
+    def _check_ok_to_mqtt(self, envelope: mqtt_pb2.ServiceEnvelope, packet, topic: str = "") -> bool:
         """
         Check if the message is marked as 'Ok to MQTT'
 
@@ -322,6 +390,7 @@ class MeshtasticMQTTFilter:
         if not packet.HasField('decoded'):
             self.stats['rejected_encrypted'] += 1
             logger.debug(f"REJECT 0x{from_id:08x}: encrypted")
+            self._log_rejected_packet("Still encrypted after decryption attempts", envelope, packet, topic)
             return False
 
         # Check the bitfield in the decoded data
@@ -331,11 +400,13 @@ class MeshtasticMQTTFilter:
             if not is_ok:
                 self.stats['rejected_bitfield_disabled'] += 1
                 logger.debug(f"REJECT 0x{from_id:08x}: bitfield disabled")
+                self._log_rejected_packet("Bitfield bit 0 (Ok to MQTT) not set", envelope, packet, topic)
             return is_ok
         else:
             # No bitfield set means not approved for MQTT
             self.stats['rejected_no_bitfield'] += 1
             logger.debug(f"REJECT 0x{from_id:08x}: no bitfield")
+            self._log_rejected_packet("No bitfield present (firmware < 2.5)", envelope, packet, topic)
             return False
 
     def start(self):
@@ -417,6 +488,11 @@ def main():
         dest='channel_keys',
         help='Add custom channel encryption key (base64). Can be specified multiple times.'
     )
+    parser.add_argument(
+        '--reject-log',
+        dest='reject_log_file',
+        help='Log file for rejected packets (optional, enables detailed rejection logging)'
+    )
 
     args = parser.parse_args()
 
@@ -473,7 +549,8 @@ def main():
         client_id=args.client_id,
         show_stats=args.show_stats,
         decrypt_default=not args.no_decrypt_default,
-        channel_keys=args.channel_keys
+        channel_keys=args.channel_keys,
+        reject_log_file=args.reject_log_file
     )
 
     filter_service.start()

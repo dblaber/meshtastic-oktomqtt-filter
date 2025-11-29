@@ -13,6 +13,9 @@ services:
       - MQTT_PASSWORD=${MQTT_PASSWORD:-replaceme}
       - INPUT_TOPIC=${INPUT_TOPIC:-msh/US/NY/#}
       - OUTPUT_TOPIC=${OUTPUT_TOPIC:-filtered/msh/US/NY}
+    volumes:
+      # Mount directory for reject log (creates /logs in container)
+      - ./logs:/logs
     command: >
       --broker ${MQTT_BROKER:-mqtt.patinhas.da4.org}
       --port ${MQTT_PORT:-1883}
@@ -21,6 +24,7 @@ services:
       --input-topic "${INPUT_TOPIC:-msh/US/NY/#}"
       --output-topic "${OUTPUT_TOPIC:-filtered/msh/US/NY}"
       --show-stats
+      --reject-log /logs/rejected.log
     # For debugging, uncomment the following:
     # command: >
     #   --broker ${MQTT_BROKER:-mqtt.patinhas.da4.org}
@@ -30,4 +34,5 @@ services:
     #   --input-topic "${INPUT_TOPIC:-msh/US/NY/#}"
     #   --output-topic "${OUTPUT_TOPIC:-filtered/msh/US/NY}"
     #   --show-stats
+    #   --reject-log /logs/rejected.log
     #   --debug

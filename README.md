@@ -15,7 +15,20 @@ Filters Meshtastic MQTT messages based on the "Ok to MQTT" flag, forwarding only
 
 ### Using Docker Compose (Recommended)
 
-1. Create a `.env` file to override default settings (optional):
+1. Create the logs directory for rejection logging with proper permissions:
+
+```bash
+mkdir -p logs
+chown 1000:1000 logs  # Set ownership to match container user (UID 1000)
+```
+
+   Alternatively, if you prefer world-writable permissions:
+   ```bash
+   mkdir -p logs
+   chmod 777 logs
+   ```
+
+2. Create a `.env` file to override default settings (optional):
 
 ```bash
 MQTT_BROKER=mqtt.patinhas.da4.org
@@ -26,28 +39,69 @@ INPUT_TOPIC=msh/US/NY/#
 OUTPUT_TOPIC=filtered/msh/US/NY
 ```
 
-2. Start the service:
+3. Start the service:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-3. View logs:
+4. View logs:
 
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
-4. Stop the service:
+5. Stop the service:
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ### Manual Installation
 
 ```bash
 pip install -r requirements.txt
+```
+
+## Updating
+
+### Docker Compose
+
+After pulling updates from git, rebuild and restart the container:
+
+```bash
+# Pull latest changes
+git pull
+
+# Rebuild the Docker image and restart
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# Verify the update
+docker-compose logs -f
+```
+
+The `--no-cache` flag ensures a fresh build with all updated code.
+
+### Manual Installation
+
+After pulling updates:
+
+```bash
+# Pull latest changes
+git pull
+
+# Update dependencies (if changed)
+pip install -r requirements.txt
+
+# Restart the service
+# If running as daemon, find and kill the process first
+ps aux | grep mqtt_filter.py
+kill <PID>
+
+# Start with your usual command
+python mqtt_filter.py --broker ... --input-topic ... --output-topic ...
 ```
 
 ## Usage
@@ -57,7 +111,7 @@ pip install -r requirements.txt
 The easiest way to run the filter is using Docker Compose. Edit the environment variables in [docker-compose.yml](docker-compose.yml) or create a `.env` file to override the defaults.
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 To enable debug logging, uncomment the debug command section in [docker-compose.yml](docker-compose.yml).
@@ -101,6 +155,7 @@ python mqtt_filter.py \
 - `--daemon`: Run as daemon in background
 - `--no-decrypt-default`: Disable decryption with default LongFast key
 - `--channel-key`: Add custom channel encryption key (base64), can be specified multiple times
+- `--reject-log`: Log file path for detailed rejection logging (optional, helps troubleshoot filtering issues)
 
 ## How It Works
 
@@ -151,6 +206,28 @@ python mqtt_filter.py \
   --show-stats \
   --daemon
 ```
+
+### Troubleshoot filtering with reject log
+
+```bash
+python mqtt_filter.py \
+  --broker mqtt.patinhas.da4.org \
+  --username meshdev \
+  --password large4cats \
+  --input-topic "msh/US/NY/#" \
+  --output-topic "filtered/msh/US/NY" \
+  --reject-log rejected_packets.log \
+  --show-stats
+```
+
+This will create a detailed log file showing:
+- Rejection reason (encrypted, no bitfield, bitfield disabled)
+- Node IDs (sender and receiver)
+- MQTT topic and channel information
+- Packet contents (text messages, telemetry data if available)
+- Bitfield values for debugging
+
+When running with Docker Compose, rejected packets are logged to `./logs/rejected.log` on the host system.
 
 ## License
 

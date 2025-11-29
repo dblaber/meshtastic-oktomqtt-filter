@@ -10,9 +10,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY mqtt_filter.py .
 
-# Create a non-root user
+# Create a non-root user and logs directory
 RUN useradd -m -u 1000 meshtastic && \
-    chown -R meshtastic:meshtastic /app
+    mkdir -p /logs && \
+    chown -R meshtastic:meshtastic /app /logs
 
 USER meshtastic
 

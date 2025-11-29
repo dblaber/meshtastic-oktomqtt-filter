@@ -1,2 +1,8 @@
 __pycache__/*
 .claude/settings.local.json
+logs/
+*.log
+*.env
+.env
+venv
+.venv
