@@ -29,19 +29,19 @@ OUTPUT_TOPIC=filtered/msh/US/NY
 2. Start the service:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 3. View logs:
 
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 4. Stop the service:
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ### Manual Installation
@@ -98,7 +98,7 @@ python mqtt_filter.py --broker ... --input-topic ... --output-topic ...
 The easiest way to run the filter is using Docker Compose. Edit the environment variables in [docker-compose.yml](docker-compose.yml) or create a `.env` file to override the defaults.
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 To enable debug logging, uncomment the debug command section in [docker-compose.yml](docker-compose.yml).

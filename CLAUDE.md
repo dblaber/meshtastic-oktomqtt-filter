@@ -18,6 +18,10 @@ python mqtt_filter.py --broker mqtt.patinhas.da4.org --username meshdev --passwo
 python mqtt_filter.py --broker mqtt.example.com --input-topic "msh/#" \
   --output-topic "filtered/mesh" --debug
 
+# With rejection logging for troubleshooting
+python mqtt_filter.py --broker mqtt.example.com --input-topic "msh/#" \
+  --output-topic "filtered/mesh" --reject-log rejected_packets.log --show-stats
+
 # As daemon (background process, Linux only)
 python mqtt_filter.py --broker mqtt.example.com --input-topic "msh/#" \
   --output-topic "filtered/mesh" --daemon
@@ -26,13 +30,18 @@ python mqtt_filter.py --broker mqtt.example.com --input-topic "msh/#" \
 ### Docker deployment
 ```bash
 # Build and run with Docker Compose (recommended)
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop service
-docker-compose down
+docker compose down
+
+# Rebuild after code changes
+docker compose down
+docker compose build --no-cache
+docker compose up -d
 
 # Build Docker image manually
 docker build -t meshtastic-mqtt-filter .
@@ -56,6 +65,7 @@ The entire application is in `mqtt_filter.py` with the following key components:
 - Subscribes to input topic (supports wildcards like `msh/US/NY/#`)
 - Decrypts packets, checks bitfield flags, forwards approved messages
 - Tracks statistics (forwarded, rejected, decryption success/failure)
+- Optional rejection logging to file for troubleshooting
 
 **Message processing flow** (on_message method):
 1. Parse ServiceEnvelope protobuf from MQTT payload
@@ -91,6 +101,15 @@ The entire application is in `mqtt_filter.py` with the following key components:
 - `rejected_encrypted`: Still encrypted after decryption attempts
 - `rejected_no_bitfield`: No bitfield field (firmware < 2.5)
 - `rejected_bitfield_disabled`: Bitfield exists but bit 0x01 not set
+
+**Rejection logging** (`_log_rejected_packet` method):
+- Optional detailed logging of rejected packets to file (enabled with `--reject-log`)
+- Logs rejection reason, node IDs, MQTT topic, channel info
+- Extracts text from TEXT_MESSAGE_APP packets
+- Extracts telemetry from TELEMETRY_APP packets
+- Shows bitfield hex values for debugging
+- Uses separate logger instance to avoid polluting main logs
+- Pipe-separated format for easy parsing
 
 ### Python keyword handling
 
@@ -131,6 +150,7 @@ See `--help` for full list. Key flags:
 - `--daemon`: Run as background daemon (Linux only)
 - `--no-decrypt-default`: Disable default LongFast key
 - `--channel-key`: Add custom encryption key (can repeat)
+- `--reject-log`: Log file path for detailed rejection logging (helps troubleshoot filtering issues)
 
 ## Reference implementation
 
