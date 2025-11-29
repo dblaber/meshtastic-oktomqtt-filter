@@ -15,7 +15,13 @@ Filters Meshtastic MQTT messages based on the "Ok to MQTT" flag, forwarding only
 
 ### Using Docker Compose (Recommended)
 
-1. Create a `.env` file to override default settings (optional):
+1. Create the logs directory for rejection logging:
+
+```bash
+mkdir -p logs
+```
+
+2. Create a `.env` file to override default settings (optional):
 
 ```bash
 MQTT_BROKER=mqtt.patinhas.da4.org
@@ -26,19 +32,19 @@ INPUT_TOPIC=msh/US/NY/#
 OUTPUT_TOPIC=filtered/msh/US/NY
 ```
 
-2. Start the service:
+3. Start the service:
 
 ```bash
 docker compose up -d
 ```
 
-3. View logs:
+4. View logs:
 
 ```bash
 docker compose logs -f
 ```
 
-4. Stop the service:
+5. Stop the service:
 
 ```bash
 docker compose down
