@@ -15,11 +15,18 @@ Filters Meshtastic MQTT messages based on the "Ok to MQTT" flag, forwarding only
 
 ### Using Docker Compose (Recommended)
 
-1. Create the logs directory for rejection logging:
+1. Create the logs directory for rejection logging with proper permissions:
 
 ```bash
 mkdir -p logs
+chown 1000:1000 logs  # Set ownership to match container user (UID 1000)
 ```
+
+   Alternatively, if you prefer world-writable permissions:
+   ```bash
+   mkdir -p logs
+   chmod 777 logs
+   ```
 
 2. Create a `.env` file to override default settings (optional):
 
