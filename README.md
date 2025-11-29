@@ -50,6 +50,47 @@ docker-compose down
 pip install -r requirements.txt
 ```
 
+## Updating
+
+### Docker Compose
+
+After pulling updates from git, rebuild and restart the container:
+
+```bash
+# Pull latest changes
+git pull
+
+# Rebuild the Docker image and restart
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# Verify the update
+docker-compose logs -f
+```
+
+The `--no-cache` flag ensures a fresh build with all updated code.
+
+### Manual Installation
+
+After pulling updates:
+
+```bash
+# Pull latest changes
+git pull
+
+# Update dependencies (if changed)
+pip install -r requirements.txt
+
+# Restart the service
+# If running as daemon, find and kill the process first
+ps aux | grep mqtt_filter.py
+kill <PID>
+
+# Start with your usual command
+python mqtt_filter.py --broker ... --input-topic ... --output-topic ...
+```
+
 ## Usage
 
 ### Docker Compose
