@@ -101,6 +101,7 @@ python mqtt_filter.py \
 - `--daemon`: Run as daemon in background
 - `--no-decrypt-default`: Disable decryption with default LongFast key
 - `--channel-key`: Add custom channel encryption key (base64), can be specified multiple times
+- `--reject-log`: Log file path for detailed rejection logging (optional, helps troubleshoot filtering issues)
 
 ## How It Works
 
@@ -151,6 +152,28 @@ python mqtt_filter.py \
   --show-stats \
   --daemon
 ```
+
+### Troubleshoot filtering with reject log
+
+```bash
+python mqtt_filter.py \
+  --broker mqtt.patinhas.da4.org \
+  --username meshdev \
+  --password large4cats \
+  --input-topic "msh/US/NY/#" \
+  --output-topic "filtered/msh/US/NY" \
+  --reject-log rejected_packets.log \
+  --show-stats
+```
+
+This will create a detailed log file showing:
+- Rejection reason (encrypted, no bitfield, bitfield disabled)
+- Node IDs (sender and receiver)
+- MQTT topic and channel information
+- Packet contents (text messages, telemetry data if available)
+- Bitfield values for debugging
+
+When running with Docker Compose, rejected packets are logged to `./logs/rejected.log` on the host system.
 
 ## License
 
