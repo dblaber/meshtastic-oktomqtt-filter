@@ -156,6 +156,7 @@ python mqtt_filter.py \
 - `--no-decrypt-default`: Disable decryption with default LongFast key
 - `--channel-key`: Add custom channel encryption key (base64), can be specified multiple times
 - `--reject-log`: Log file path for detailed rejection logging (optional, helps troubleshoot filtering issues)
+- `--allow-no-bitfield`: Allow packets without bitfield (backwards compatibility for older firmware or firmware that doesn't populate bitfield)
 
 ## How It Works
 

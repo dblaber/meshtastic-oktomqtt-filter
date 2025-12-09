@@ -25,6 +25,7 @@ services:
       --output-topic "${OUTPUT_TOPIC:-filtered/msh/US/NY}"
       --show-stats
       --reject-log /logs/rejected.log
+      --allow-no-bitfield
     # For debugging, uncomment the following:
     # command: >
     #   --broker ${MQTT_BROKER:-mqtt.patinhas.da4.org}
@@ -35,4 +36,5 @@ services:
     #   --output-topic "${OUTPUT_TOPIC:-filtered/msh/US/NY}"
     #   --show-stats
     #   --reject-log /logs/rejected.log
+    #   --allow-no-bitfield
     #   --debug
