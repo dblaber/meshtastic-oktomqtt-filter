@@ -15,7 +15,18 @@ Filters Meshtastic MQTT messages based on the "Ok to MQTT" flag, forwarding only
 
 ### Using Docker Compose (Recommended)
 
-1. Create the logs directory for rejection logging with proper permissions:
+1. Create a `.env` file to override default settings (optional):
+
+```bash
+MQTT_BROKER=mqtt.patinhas.da4.org
+MQTT_PORT=1883
+MQTT_USERNAME=meshdev
+MQTT_PASSWORD=large4cats
+INPUT_TOPIC=msh/US/NY/#
+OUTPUT_TOPIC=filtered/msh/US/NY
+```
+
+2. (Optional) If using `--reject-log` for troubleshooting, create the logs directory with proper permissions:
 
 ```bash
 mkdir -p logs
@@ -27,17 +38,6 @@ chown 1000:1000 logs  # Set ownership to match container user (UID 1000)
    mkdir -p logs
    chmod 777 logs
    ```
-
-2. Create a `.env` file to override default settings (optional):
-
-```bash
-MQTT_BROKER=mqtt.patinhas.da4.org
-MQTT_PORT=1883
-MQTT_USERNAME=meshdev
-MQTT_PASSWORD=large4cats
-INPUT_TOPIC=msh/US/NY/#
-OUTPUT_TOPIC=filtered/msh/US/NY
-```
 
 3. Start the service:
 
@@ -156,6 +156,7 @@ python mqtt_filter.py \
 - `--no-decrypt-default`: Disable decryption with default LongFast key
 - `--channel-key`: Add custom channel encryption key (base64), can be specified multiple times
 - `--reject-log`: Log file path for detailed rejection logging (optional, helps troubleshoot filtering issues)
+- `--allow-no-bitfield`: Allow packets without bitfield (backwards compatibility for older firmware or firmware that doesn't populate bitfield)
 
 ## How It Works
 
@@ -227,7 +228,7 @@ This will create a detailed log file showing:
 - Packet contents (text messages, telemetry data if available)
 - Bitfield values for debugging
 
-When running with Docker Compose, rejected packets are logged to `./logs/rejected.log` on the host system.
+To enable rejection logging with Docker Compose, uncomment the `--reject-log /logs/rejected.log` line in [docker-compose.yml](docker-compose.yml) and ensure the logs directory is created with proper permissions.
 
 ## License
 

@@ -42,7 +42,8 @@ class MeshtasticMQTTFilter:
         show_stats: bool = False,
         decrypt_default: bool = True,
         channel_keys: Optional[List[str]] = None,
-        reject_log_file: Optional[str] = None
+        reject_log_file: Optional[str] = None,
+        allow_no_bitfield: bool = False
     ):
         self.broker = broker
         self.port = port
@@ -52,6 +53,7 @@ class MeshtasticMQTTFilter:
         self.password = password
         self.show_stats = show_stats
         self.reject_log_file = reject_log_file
+        self.allow_no_bitfield = allow_no_bitfield
 
         # Set up reject logger if file specified
         self.reject_logger = None
@@ -403,11 +405,15 @@ class MeshtasticMQTTFilter:
                 self._log_rejected_packet("Bitfield bit 0 (Ok to MQTT) not set", envelope, packet, topic)
             return is_ok
         else:
-            # No bitfield set means not approved for MQTT
-            self.stats['rejected_no_bitfield'] += 1
-            logger.debug(f"REJECT 0x{from_id:08x}: no bitfield")
-            self._log_rejected_packet("No bitfield present (firmware < 2.5)", envelope, packet, topic)
-            return False
+            # No bitfield set - behavior depends on allow_no_bitfield flag
+            if self.allow_no_bitfield:
+                logger.debug(f"ALLOW 0x{from_id:08x}: no bitfield (allow_no_bitfield=True)")
+                return True
+            else:
+                self.stats['rejected_no_bitfield'] += 1
+                logger.debug(f"REJECT 0x{from_id:08x}: no bitfield")
+                self._log_rejected_packet("No bitfield present (firmware < 2.5)", envelope, packet, topic)
+                return False
 
     def start(self):
         """Start the MQTT filter service"""
@@ -493,6 +499,11 @@ def main():
         dest='reject_log_file',
         help='Log file for rejected packets (optional, enables detailed rejection logging)'
     )
+    parser.add_argument(
+        '--allow-no-bitfield',
+        action='store_true',
+        help='Allow packets without bitfield (for older firmware or backwards compatibility)'
+    )
 
     args = parser.parse_args()
 
@@ -550,7 +561,8 @@ def main():
         show_stats=args.show_stats,
         decrypt_default=not args.no_decrypt_default,
         channel_keys=args.channel_keys,
-        reject_log_file=args.reject_log_file
+        reject_log_file=args.reject_log_file,
+        allow_no_bitfield=args.allow_no_bitfield
     )
 
     filter_service.start()
