@@ -2,25 +2,32 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock, call
 import base64
-
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mqtt_filter import MeshtasticMQTTFilter
 from meshtastic.protobuf import mesh_pb2, mqtt_pb2
+
+
+# Import inside fixture to avoid coverage warning
+@pytest.fixture
+def mqtt_filter_class():
+    """Import MeshtasticMQTTFilter class"""
+    from mqtt_filter import MeshtasticMQTTFilter
+    return MeshtasticMQTTFilter
 
 
 class TestMessageProcessing:
     """Test end-to-end message processing"""
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_forward_valid_message(self, mock_client_class):
+    def test_forward_valid_message(self, mock_client_class, mqtt_filter_class):
         """Test forwarding a valid message with Ok to MQTT bitfield"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -57,12 +64,12 @@ class TestMessageProcessing:
         assert filter_service.stats['forwarded'] == 1
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_reject_message_no_bitfield(self, mock_client_class):
+    def test_reject_message_no_bitfield(self, mock_client_class, mqtt_filter_class):
         """Test rejecting a message without Ok to MQTT bitfield"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -89,12 +96,12 @@ class TestMessageProcessing:
         assert filter_service.stats['rejected_bitfield_disabled'] == 1
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_forward_exempt_node_message(self, mock_client_class):
+    def test_forward_exempt_node_message(self, mock_client_class, mqtt_filter_class):
         """Test forwarding message from exempt node regardless of bitfield"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -123,12 +130,12 @@ class TestMessageProcessing:
         assert filter_service.stats['forwarded'] == 1
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_topic_mapping(self, mock_client_class):
+    def test_topic_mapping(self, mock_client_class, mqtt_filter_class):
         """Test that input topic prefix is correctly replaced with output prefix"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/US/NY/#",
@@ -154,12 +161,12 @@ class TestMessageProcessing:
         assert call_args[0][0] == "filtered/msh/US/NY/2/e/LongFast/!12345678"
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_statistics_tracking(self, mock_client_class):
+    def test_statistics_tracking(self, mock_client_class, mqtt_filter_class):
         """Test that statistics are tracked correctly during processing"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -205,12 +212,12 @@ class TestConnectionHandling:
     """Test MQTT connection handling"""
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_on_connect_success(self, mock_client_class):
+    def test_on_connect_success(self, mock_client_class, mqtt_filter_class):
         """Test successful MQTT connection"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -224,12 +231,12 @@ class TestConnectionHandling:
         mock_client.subscribe.assert_called_once_with("msh/test/#")
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_on_connect_failure(self, mock_client_class):
+    def test_on_connect_failure(self, mock_client_class, mqtt_filter_class):
         """Test failed MQTT connection"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -243,12 +250,12 @@ class TestConnectionHandling:
         assert not mock_client.subscribe.called
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_on_disconnect(self, mock_client_class):
+    def test_on_disconnect(self, mock_client_class, mqtt_filter_class):
         """Test handling of disconnect"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -266,12 +273,12 @@ class TestErrorHandling:
     """Test error handling in message processing"""
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_malformed_protobuf(self, mock_client_class):
+    def test_malformed_protobuf(self, mock_client_class, mqtt_filter_class):
         """Test handling of malformed protobuf message"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",

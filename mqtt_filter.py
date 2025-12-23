@@ -68,12 +68,12 @@ class MeshtasticMQTTFilter:
                     elif node_str.startswith('!'):
                         # Support Meshtastic node ID format like !a1b2c3d4
                         node_id = int(node_str[1:], 16)
+                    elif node_str.isdigit():
+                        # All digits - treat as decimal
+                        node_id = int(node_str, 10)
                     else:
-                        # Try hex first, fall back to decimal
-                        try:
-                            node_id = int(node_str, 16)
-                        except ValueError:
-                            node_id = int(node_str, 10)
+                        # Contains letters - treat as hex
+                        node_id = int(node_str, 16)
                     self.exempt_nodes.add(node_id)
                     logger.info(f"Exempting node ID: 0x{node_id:08x}")
                 except ValueError as e:
@@ -176,7 +176,8 @@ class MeshtasticMQTTFilter:
             logger.debug(f"MeshPacket: from=0x{from_id:08x}, to=0x{to_id:08x}, channel={packet.channel}, id={packet.id}")
 
             if packet.HasField('decoded'):
-                logger.debug(f"Decoded: portnum={packet.decoded.portnum}, bitfield=0x{packet.decoded.bitfield:02x if packet.decoded.HasField('bitfield') else 0}")
+                bitfield_str = f"0x{packet.decoded.bitfield:02x}" if packet.decoded.HasField('bitfield') else "None"
+                logger.debug(f"Decoded: portnum={packet.decoded.portnum}, bitfield={bitfield_str}")
             else:
                 logger.debug("Decoded: NOT PRESENT (encrypted)")
 

@@ -2,26 +2,33 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 import base64
-
-# Import the module under test
 import sys
 import os
+
+# Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mqtt_filter import MeshtasticMQTTFilter
 from meshtastic.protobuf import mesh_pb2, mqtt_pb2
+
+
+# Import inside fixture to avoid coverage warning
+@pytest.fixture
+def mqtt_filter_class():
+    """Import MeshtasticMQTTFilter class"""
+    from mqtt_filter import MeshtasticMQTTFilter
+    return MeshtasticMQTTFilter
 
 
 class TestMeshtasticMQTTFilterInit:
     """Test initialization and configuration"""
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_basic_initialization(self, mock_client_class):
+    def test_basic_initialization(self, mock_client_class, mqtt_filter_class):
         """Test basic filter initialization"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -36,12 +43,12 @@ class TestMeshtasticMQTTFilterInit:
         assert len(filter_service.keys) == 1  # Default key
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_initialization_with_credentials(self, mock_client_class):
+    def test_initialization_with_credentials(self, mock_client_class, mqtt_filter_class):
         """Test initialization with MQTT credentials"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -53,12 +60,12 @@ class TestMeshtasticMQTTFilterInit:
         mock_client.username_pw_set.assert_called_once_with("testuser", "testpass")
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_no_default_key(self, mock_client_class):
+    def test_no_default_key(self, mock_client_class, mqtt_filter_class):
         """Test disabling default LongFast key"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -73,12 +80,12 @@ class TestExemptNodes:
     """Test exempt node functionality"""
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_hex_format(self, mock_client_class):
+    def test_exempt_node_hex_format(self, mock_client_class, mqtt_filter_class):
         """Test parsing exempt nodes in hex format"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -91,12 +98,12 @@ class TestExemptNodes:
         assert len(filter_service.exempt_nodes) == 2
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_meshtastic_format(self, mock_client_class):
+    def test_exempt_node_meshtastic_format(self, mock_client_class, mqtt_filter_class):
         """Test parsing exempt nodes in Meshtastic format (!abcd1234)"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -108,12 +115,12 @@ class TestExemptNodes:
         assert 0xABCDEF01 in filter_service.exempt_nodes
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_decimal_format(self, mock_client_class):
+    def test_exempt_node_decimal_format(self, mock_client_class, mqtt_filter_class):
         """Test parsing exempt nodes in decimal format"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -124,13 +131,13 @@ class TestExemptNodes:
         assert 0x12345678 in filter_service.exempt_nodes
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_invalid_format(self, mock_client_class):
+    def test_exempt_node_invalid_format(self, mock_client_class, mqtt_filter_class):
         """Test handling of invalid exempt node format"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
         # Should not raise exception, just log error
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -147,12 +154,12 @@ class TestCheckOkToMQTT:
     """Test the _check_ok_to_mqtt method"""
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_bypasses_filter(self, mock_client_class):
+    def test_exempt_node_bypasses_filter(self, mock_client_class, mqtt_filter_class):
         """Test that exempt nodes bypass all filtering"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -171,12 +178,12 @@ class TestCheckOkToMQTT:
         assert filter_service.stats['forwarded_exempt'] == 1
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_packet_with_ok_to_mqtt_bitfield(self, mock_client_class):
+    def test_packet_with_ok_to_mqtt_bitfield(self, mock_client_class, mqtt_filter_class):
         """Test packet with Ok to MQTT bitfield set"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -194,12 +201,12 @@ class TestCheckOkToMQTT:
         assert result is True
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_packet_without_ok_to_mqtt_bitfield(self, mock_client_class):
+    def test_packet_without_ok_to_mqtt_bitfield(self, mock_client_class, mqtt_filter_class):
         """Test packet without Ok to MQTT bitfield set"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -218,12 +225,12 @@ class TestCheckOkToMQTT:
         assert filter_service.stats['rejected_bitfield_disabled'] == 1
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_encrypted_packet_rejected(self, mock_client_class):
+    def test_encrypted_packet_rejected(self, mock_client_class, mqtt_filter_class):
         """Test encrypted packet (no decoded data) is rejected"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -241,12 +248,12 @@ class TestCheckOkToMQTT:
         assert filter_service.stats['rejected_encrypted'] == 1
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_no_bitfield_with_allow_flag(self, mock_client_class):
+    def test_no_bitfield_with_allow_flag(self, mock_client_class, mqtt_filter_class):
         """Test packet without bitfield when allow_no_bitfield is True"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -265,12 +272,12 @@ class TestCheckOkToMQTT:
         assert result is True
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_no_bitfield_without_allow_flag(self, mock_client_class):
+    def test_no_bitfield_without_allow_flag(self, mock_client_class, mqtt_filter_class):
         """Test packet without bitfield when allow_no_bitfield is False"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -294,12 +301,12 @@ class TestStatistics:
     """Test statistics tracking"""
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_statistics_initialization(self, mock_client_class):
+    def test_statistics_initialization(self, mock_client_class, mqtt_filter_class):
         """Test statistics are initialized correctly"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -316,12 +323,12 @@ class TestStatistics:
         assert filter_service.stats['forwarded_exempt'] == 0
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_statistics(self, mock_client_class):
+    def test_exempt_node_statistics(self, mock_client_class, mqtt_filter_class):
         """Test exempt node statistics are tracked"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -343,14 +350,14 @@ class TestCustomEncryptionKeys:
     """Test custom encryption key handling"""
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_add_custom_keys(self, mock_client_class):
+    def test_add_custom_keys(self, mock_client_class, mqtt_filter_class):
         """Test adding custom encryption keys"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
         custom_key = base64.b64encode(b"0123456789abcdef").decode()
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -364,12 +371,12 @@ class TestCustomEncryptionKeys:
         assert filter_service.keys[1][0] == 'custom-0'
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_invalid_custom_key(self, mock_client_class):
+    def test_invalid_custom_key(self, mock_client_class, mqtt_filter_class):
         """Test handling of invalid custom key"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -385,14 +392,14 @@ class TestRejectLogging:
     """Test rejection logging functionality"""
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_reject_logger_initialization(self, mock_client_class, tmp_path):
+    def test_reject_logger_initialization(self, mock_client_class, mqtt_filter_class, tmp_path):
         """Test reject logger is initialized when file is specified"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
         log_file = tmp_path / "rejected.log"
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
@@ -403,12 +410,12 @@ class TestRejectLogging:
         assert filter_service.reject_logger is not None
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_no_reject_logger_without_file(self, mock_client_class):
+    def test_no_reject_logger_without_file(self, mock_client_class, mqtt_filter_class):
         """Test reject logger is not initialized without file"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        filter_service = MeshtasticMQTTFilter(
+        filter_service = mqtt_filter_class(
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
