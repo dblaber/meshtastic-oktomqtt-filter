@@ -6,3 +6,10 @@ logs/
 .env
 venv
 .venv
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+*.cover
+.hypothesis/

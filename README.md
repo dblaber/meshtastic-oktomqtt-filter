@@ -189,6 +189,30 @@ python mqtt_filter.py \
   --daemon
 ```
 
+## Testing
+
+The project includes a comprehensive test suite. See [tests/README.md](tests/README.md) for details.
+
+### Running Tests
+
+```bash
+# Install test dependencies
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# Run all tests
+pytest
+
+# Run with coverage report
+pytest --cov=mqtt_filter --cov-report=html
+```
+
+### Test Structure
+
+- `tests/test_mqtt_filter.py` - Unit tests for core functionality
+- `tests/test_message_processing.py` - Integration tests for message pipeline
+- `tests/conftest.py` - Shared test fixtures
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
