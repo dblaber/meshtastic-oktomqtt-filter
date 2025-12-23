@@ -13,26 +13,15 @@ services:
       - MQTT_PASSWORD=${MQTT_PASSWORD:-replaceme}
       - INPUT_TOPIC=${INPUT_TOPIC:-msh/US/NY/#}
       - OUTPUT_TOPIC=${OUTPUT_TOPIC:-filtered/msh/US/NY}
+      - SHOW_STATS=${SHOW_STATS:-true}
+      - DEBUG=${DEBUG:-false}
+      - NO_DECRYPT_DEFAULT=${NO_DECRYPT_DEFAULT:-false}
+      - ALLOW_NO_BITFIELD=${ALLOW_NO_BITFIELD:-false}
+      - REJECT_LOG_FILE=${REJECT_LOG_FILE:-}
+      # Comma-separated list of exempt node IDs (supports: 0xABCD1234, !a1b2c3d4, ABCD1234, or decimal)
+      - EXEMPT_NODES=${EXEMPT_NODES:-}
+      # Comma-separated list of channel encryption keys (base64)
+      - CHANNEL_KEYS=${CHANNEL_KEYS:-}
     volumes:
-      # Mount directory for reject log (optional, uncomment if using --reject-log)
-      - ./logs:/logs
-    command: >
-      --broker ${MQTT_BROKER:-mqtt.patinhas.da4.org}
-      --port ${MQTT_PORT:-1883}
-      --username ${MQTT_USERNAME:-meshdev}
-      --password ${MQTT_PASSWORD:-replaceme}
-      --input-topic "${INPUT_TOPIC:-msh/US/NY/#}"
-      --output-topic "${OUTPUT_TOPIC:-filtered/msh/US/NY}"
-      --show-stats
-      --allow-no-bitfield
-    # For debugging, uncomment the following:
-    # command: >
-    #   --broker ${MQTT_BROKER:-mqtt.patinhas.da4.org}
-    #   --port ${MQTT_PORT:-1883}
-    #   --username ${MQTT_USERNAME:-meshdev}
-    #   --password ${MQTT_PASSWORD:-replaceme}
-    #   --input-topic "${INPUT_TOPIC:-msh/US/NY/#}"
-    #   --output-topic "${OUTPUT_TOPIC:-filtered/msh/US/NY}"
-    #   --show-stats
-    #   --allow-no-bitfield
-    #   --debug
+      # Mount logs directory if REJECT_LOG_FILE is used
+      - ${LOGS_DIR:-./logs}:/app/logs

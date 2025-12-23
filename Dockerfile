@@ -9,16 +9,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
 COPY mqtt_filter.py .
+COPY entrypoint.sh .
 
-# Create a non-root user and logs directory
+# Create a non-root user, logs directory, and make entrypoint executable
 RUN useradd -m -u 1000 meshtastic && \
-    mkdir -p /logs && \
-    chown -R meshtastic:meshtastic /app /logs
+    mkdir -p /app/logs && \
+    chown -R meshtastic:meshtastic /app && \
+    chmod +x /app/entrypoint.sh
 
 USER meshtastic
 
 # Set entrypoint
-ENTRYPOINT ["python", "mqtt_filter.py"]
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Default arguments (can be overridden)
-CMD ["--help"]
+CMD []

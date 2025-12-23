@@ -43,7 +43,8 @@ class MeshtasticMQTTFilter:
         decrypt_default: bool = True,
         channel_keys: Optional[List[str]] = None,
         reject_log_file: Optional[str] = None,
-        allow_no_bitfield: bool = False
+        allow_no_bitfield: bool = False,
+        exempt_nodes: Optional[List[str]] = None
     ):
         self.broker = broker
         self.port = port
@@ -54,6 +55,32 @@ class MeshtasticMQTTFilter:
         self.show_stats = show_stats
         self.reject_log_file = reject_log_file
         self.allow_no_bitfield = allow_no_bitfield
+
+        # Parse exempt node IDs (support hex format with or without 0x prefix)
+        self.exempt_nodes = set()
+        if exempt_nodes:
+            for node_str in exempt_nodes:
+                try:
+                    # Support both decimal and hex format (0xABCD1234 or ABCD1234)
+                    node_str = node_str.strip()
+                    if node_str.startswith('0x') or node_str.startswith('0X'):
+                        node_id = int(node_str, 16)
+                    elif node_str.startswith('!'):
+                        # Support Meshtastic node ID format like !a1b2c3d4
+                        node_id = int(node_str[1:], 16)
+                    else:
+                        # Try hex first, fall back to decimal
+                        try:
+                            node_id = int(node_str, 16)
+                        except ValueError:
+                            node_id = int(node_str, 10)
+                    self.exempt_nodes.add(node_id)
+                    logger.info(f"Exempting node ID: 0x{node_id:08x}")
+                except ValueError as e:
+                    logger.error(f"Invalid node ID format '{node_str}': {e}")
+
+        if self.exempt_nodes:
+            logger.info(f"Total exempt nodes: {len(self.exempt_nodes)}")
 
         # Set up reject logger if file specified
         self.reject_logger = None
@@ -96,7 +123,8 @@ class MeshtasticMQTTFilter:
             'rejected_no_bitfield': 0,
             'rejected_bitfield_disabled': 0,
             'decrypted': 0,
-            'decryption_failed': 0
+            'decryption_failed': 0,
+            'forwarded_exempt': 0
         }
         self.last_stats_time = time.time()
 
@@ -208,6 +236,8 @@ class MeshtasticMQTTFilter:
         logger.info("MESSAGE STATISTICS:")
         logger.info(f"  Total messages: {total}")
         logger.info(f"  Forwarded: {forwarded} ({100*forwarded/total:.1f}%)")
+        if self.stats['forwarded_exempt'] > 0:
+            logger.info(f"    - Exempt nodes: {self.stats['forwarded_exempt']} ({100*self.stats['forwarded_exempt']/total:.1f}%)")
         logger.info(f"  Rejected: {rejected} ({100*rejected/total:.1f}%)")
         if self.stats['decrypted'] > 0:
             logger.info(f"  Decrypted: {self.stats['decrypted']}")
@@ -388,6 +418,12 @@ class MeshtasticMQTTFilter:
         """
         from_id = getattr(packet, 'from', 0)
 
+        # Check if this node is exempt from filtering
+        if from_id in self.exempt_nodes:
+            self.stats['forwarded_exempt'] += 1
+            logger.debug(f"EXEMPT 0x{from_id:08x}: node is on exemption list")
+            return True
+
         # Check if the packet has decoded data
         if not packet.HasField('decoded'):
             self.stats['rejected_encrypted'] += 1
@@ -504,6 +540,12 @@ def main():
         action='store_true',
         help='Allow packets without bitfield (for older firmware or backwards compatibility)'
     )
+    parser.add_argument(
+        '--exempt-node',
+        action='append',
+        dest='exempt_nodes',
+        help='Exempt node ID from filtering (forwards all messages). Supports formats: 0xABCD1234, ABCD1234, !abcd1234, or decimal. Can be specified multiple times.'
+    )
 
     args = parser.parse_args()
 
@@ -562,7 +604,8 @@ def main():
         decrypt_default=not args.no_decrypt_default,
         channel_keys=args.channel_keys,
         reject_log_file=args.reject_log_file,
-        allow_no_bitfield=args.allow_no_bitfield
+        allow_no_bitfield=args.allow_no_bitfield,
+        exempt_nodes=args.exempt_nodes
     )
 
     filter_service.start()

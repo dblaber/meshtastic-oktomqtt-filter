@@ -4,158 +4,193 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Meshtastic MQTT Filter - A single-file Python application that filters Meshtastic MQTT messages based on the "Ok to MQTT" user preference flag (bitfield bit 0x01). The filter decrypts encrypted packets and only forwards messages from users who have explicitly enabled MQTT uplink in their Meshtastic firmware (v2.5+).
+This is a Meshtastic MQTT filter service that processes Meshtastic mesh network messages from MQTT, filtering them based on the "Ok to MQTT" bitfield flag (firmware 2.5+), and forwarding only authorized messages to an output topic. The service can automatically decrypt encrypted packets using the default LongFast key or custom channel keys. It also supports exempting specific node IDs from filtering to always forward their messages regardless of the "Ok to MQTT" flag.
+
+## Architecture
+
+### Single-File Python Application
+
+The entire application is contained in `mqtt_filter.py` (480 lines). It implements:
+
+1. **MeshtasticMQTTFilter class** (mqtt_filter.py:32-353): Main service class that handles:
+   - MQTT client setup and connection management
+   - Message subscription and processing pipeline
+   - Decryption of encrypted packets
+   - Statistics tracking and reporting
+
+2. **Key Components**:
+   - **Message Processing Pipeline** (on_message, mqtt_filter.py:103-174):
+     - Parse ServiceEnvelope protobuf from MQTT payload
+     - Attempt decryption if encrypted (mqtt_filter.py:134-145)
+     - Check "Ok to MQTT" bitfield flag (mqtt_filter.py:150)
+     - Forward approved messages to output topic
+
+   - **Decryption System** (_decrypt_packet, mqtt_filter.py:225-310):
+     - Supports multiple encryption keys (default LongFast + custom keys)
+     - Uses AES-CTR mode with packet_id + sender_id as 16-byte nonce
+     - Key derivation via SHA256(base_key + channel_name) for named channels
+     - LongFast channel uses base key directly without derivation
+
+   - **Authorization Check** (_check_ok_to_mqtt, mqtt_filter.py:342-375):
+     - First checks if node ID is in the exempt list (bypasses all filtering)
+     - Validates packet has decoded (non-encrypted) data
+     - Checks bit 0 (0x01) of bitfield in decoded data
+     - Tracks rejection reasons and exemptions in statistics
+
+3. **Statistics Tracking** (mqtt_filter.py:96-106, 204-227):
+   - Total messages, forwarded, rejected
+   - Decryption success/failure counts
+   - Exempt node forward counts
+   - Rejection reason breakdown (encrypted, no bitfield, bitfield disabled)
+   - Periodic reporting every 10 messages or 30 seconds (with --show-stats)
+
+### Meshtastic Protocol Details
+
+- Uses protobuf definitions from `meshtastic.protobuf` package:
+  - `mqtt_pb2.ServiceEnvelope`: MQTT message wrapper
+  - `mesh_pb2.Data`: Decoded packet data
+  - `portnums_pb2`, `telemetry_pb2`: Port number types
+- Default LongFast key: `1PG7OiApB1nwvP+rz05pAQ==` (base64)
+- Encryption: AES-128-CTR with nonce = packet_id (8 bytes LE) + from_node (8 bytes LE)
 
 ## Development Commands
 
-### Running the filter
-```bash
-# Direct execution with test broker
-python mqtt_filter.py --broker mqtt.patinhas.da4.org --username meshdev --password large4cats \
-  --input-topic "msh/US/NY/#" --output-topic "filtered/msh/US/NY" --show-stats
+### Running Locally
 
-# With debug logging
-python mqtt_filter.py --broker mqtt.example.com --input-topic "msh/#" \
-  --output-topic "filtered/mesh" --debug
-
-# With rejection logging for troubleshooting
-python mqtt_filter.py --broker mqtt.example.com --input-topic "msh/#" \
-  --output-topic "filtered/mesh" --reject-log rejected_packets.log --show-stats
-
-# As daemon (background process, Linux only)
-python mqtt_filter.py --broker mqtt.example.com --input-topic "msh/#" \
-  --output-topic "filtered/mesh" --daemon
-```
-
-### Docker deployment
-```bash
-# Build and run with Docker Compose (recommended)
-docker compose up -d
-
-# View logs
-docker compose logs -f
-
-# Stop service
-docker compose down
-
-# Rebuild after code changes
-docker compose down
-docker compose build --no-cache
-docker compose up -d
-
-# Build Docker image manually
-docker build -t meshtastic-mqtt-filter .
-```
-
-### Dependencies
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Dependencies: paho-mqtt, meshtastic, protobuf, cryptography
+# Run with debug logging
+python mqtt_filter.py \
+  --broker mqtt.example.com \
+  --input-topic "msh/US/NY/#" \
+  --output-topic "filtered/msh/US/NY" \
+  --debug
+
+# Run with statistics
+python mqtt_filter.py \
+  --broker mqtt.example.com \
+  --input-topic "msh/US/NY/#" \
+  --output-topic "filtered/msh/US/NY" \
+  --show-stats
+
+# Run as daemon
+python mqtt_filter.py \
+  --broker mqtt.example.com \
+  --input-topic "msh/US/NY/#" \
+  --output-topic "filtered/msh/US/NY" \
+  --daemon
+
+# Run with custom encryption keys
+python mqtt_filter.py \
+  --broker mqtt.example.com \
+  --input-topic "msh/US/NY/#" \
+  --output-topic "filtered/msh/US/NY" \
+  --channel-key "base64-encoded-key-1=" \
+  --channel-key "base64-encoded-key-2="
+
+# Disable default LongFast decryption
+python mqtt_filter.py \
+  --broker mqtt.example.com \
+  --input-topic "msh/US/NY/#" \
+  --output-topic "filtered/msh/US/NY" \
+  --no-decrypt-default
+
+# Exempt specific nodes from filtering
+python mqtt_filter.py \
+  --broker mqtt.example.com \
+  --input-topic "msh/US/NY/#" \
+  --output-topic "filtered/msh/US/NY" \
+  --exempt-node "0x12345678" \
+  --exempt-node "!a1b2c3d4"
 ```
 
-## Architecture
+### Docker Development
 
-### Single-file application structure
-The entire application is in `mqtt_filter.py` with the following key components:
+```bash
+# Build image
+docker build -t meshtastic-mqtt-filter .
 
-**MeshtasticMQTTFilter class**:
-- MQTT client wrapper with encryption support
-- Subscribes to input topic (supports wildcards like `msh/US/NY/#`)
-- Decrypts packets, checks bitfield flags, forwards approved messages
-- Tracks statistics (forwarded, rejected, decryption success/failure)
-- Optional rejection logging to file for troubleshooting
+# Run container
+docker run --rm meshtastic-mqtt-filter \
+  --broker mqtt.example.com \
+  --input-topic "msh/US/NY/#" \
+  --output-topic "filtered/msh/US/NY"
 
-**Message processing flow** (on_message method):
-1. Parse ServiceEnvelope protobuf from MQTT payload
-2. If encrypted: attempt decryption with available keys
-3. Check bitfield bit 0x01 for "Ok to MQTT" approval
-4. Forward approved messages to output topic (dynamic topic mapping)
-5. Track statistics and log results
+# Run with docker-compose (recommended)
+docker-compose up -d
 
-### Encryption implementation
+# View logs
+docker-compose logs -f
 
-**Critical implementation details**:
-- Uses `cryptography` library (NOT pycryptodome)
-- Algorithm: AES-128-CTR (or AES-256-CTR for derived keys)
-- Nonce: `packet_id (8 bytes LE) + sender_id (8 bytes LE)` = 16 bytes
-- Default LongFast key: `1PG7OiApB1nwvP+rz05pAQ==` (16 bytes, base64)
+# Stop service
+docker-compose down
 
-**Key derivation** (`_derive_key` method):
-- Preset channels (LongFast): Use base key directly, NO derivation
-- Custom named channels: `SHA256(base_key + channel_name_bytes)` → 32 bytes
-- Channel name from `envelope.channel_id`
-
-**Important**: LongFast is a modem preset name, NOT a custom channel. Never apply SHA256 derivation to "LongFast" - use the 16-byte base key as-is.
-
-### Bitfield filtering
-
-**"Ok to MQTT" detection** (`_check_ok_to_mqtt` method):
-1. Check if packet has decoded data (not still encrypted)
-2. Check if `packet.decoded.bitfield` field exists
-3. Test bit 0: `packet.decoded.bitfield & 0x01`
-4. Reject if bit not set or bitfield missing (older firmware)
-
-**Rejection categories tracked**:
-- `rejected_encrypted`: Still encrypted after decryption attempts
-- `rejected_no_bitfield`: No bitfield field (firmware < 2.5)
-- `rejected_bitfield_disabled`: Bitfield exists but bit 0x01 not set
-
-**Rejection logging** (`_log_rejected_packet` method):
-- Optional detailed logging of rejected packets to file (enabled with `--reject-log`)
-- Logs rejection reason, node IDs, MQTT topic, channel info
-- Extracts text from TEXT_MESSAGE_APP packets
-- Extracts telemetry from TELEMETRY_APP packets
-- Shows bitfield hex values for debugging
-- Uses separate logger instance to avoid polluting main logs
-- Pipe-separated format for easy parsing
-
-### Python keyword handling
-
-The protobuf field `from` is a Python keyword. Always access using:
-```python
-from_id = getattr(packet, 'from', 0)
-```
-Never use `packet.from` directly.
-
-### Topic mapping
-
-Input topics support wildcards (`msh/US/NY/#`). Output topics are dynamically generated:
-```python
-output_topic = msg.topic.replace(
-    self.input_topic.rstrip('/#'),
-    self.output_topic.rstrip('/#'),
-    1
-)
+# Rebuild after changes
+docker-compose up -d --build
 ```
 
-Example: Input `msh/US/NY/2/e/LongFast/!abc123` → Output `filtered/msh/US/NY/2/e/LongFast/!abc123`
+### Configuration
 
-## Configuration
+Docker Compose uses environment variables (configure in `.env` file):
+- `MQTT_BROKER`: MQTT broker hostname
+- `MQTT_PORT`: MQTT broker port (default: 1883)
+- `MQTT_USERNAME`: MQTT username
+- `MQTT_PASSWORD`: MQTT password
+- `INPUT_TOPIC`: Input topic pattern (supports wildcards like `msh/US/NY/#`)
+- `OUTPUT_TOPIC`: Output topic for filtered messages
+- `SHOW_STATS`: Enable statistics output (default: true)
+- `DEBUG`: Enable debug logging (default: false)
+- `NO_DECRYPT_DEFAULT`: Disable default LongFast decryption (default: false)
+- `EXEMPT_NODES`: Comma-separated list of exempt node IDs (e.g., `0x12345678,!a1b2c3d4`)
+- `CHANNEL_KEYS`: Comma-separated list of base64 channel keys
 
-### Environment variables (Docker)
-Defined in `docker-compose.yml` with defaults:
-- `MQTT_BROKER`: Broker hostname
-- `MQTT_PORT`: Broker port (default 1883)
-- `MQTT_USERNAME`, `MQTT_PASSWORD`: Credentials
-- `INPUT_TOPIC`, `OUTPUT_TOPIC`: Topic paths
+The entrypoint script (entrypoint.sh) parses these environment variables and converts them to command-line arguments.
 
-Override via `.env` file or `docker-compose.override.yml`.
+## Testing
 
-### Command-line arguments
-See `--help` for full list. Key flags:
-- `--debug`: Enable debug logging
-- `--show-stats`: Print stats every 30 seconds
-- `--daemon`: Run as background daemon (Linux only)
-- `--no-decrypt-default`: Disable default LongFast key
-- `--channel-key`: Add custom encryption key (can repeat)
-- `--reject-log`: Log file path for detailed rejection logging (helps troubleshoot filtering issues)
+No automated tests are currently implemented. To test manually:
 
-## Reference implementation
+1. Connect to a Meshtastic MQTT broker with test data
+2. Run the filter with `--debug` to see detailed message processing
+3. Verify filtered messages appear on output topic
+4. Check statistics with `--show-stats` to validate filtering logic
 
-Decryption logic based on [malla project](https://github.com/zenitraM/malla) at `/tmp/malla/src/malla/utils/decryption.py`. When modifying encryption code, reference this implementation for correctness.
+## Dependencies
 
-## License
+Core dependencies (requirements.txt):
+- `paho-mqtt>=1.6.1`: MQTT client library
+- `meshtastic>=2.2.0`: Meshtastic protobuf definitions
+- `protobuf>=4.21.0`: Protocol buffers
+- `cryptography>=41.0.0`: AES encryption for packet decryption
 
-MIT License - see LICENSE file.
+## Important Implementation Notes
+
+### Decryption Key Derivation
+
+The key derivation logic (mqtt_filter.py:199-223, 252-257) has special handling:
+- LongFast channel and empty channel names use the base key directly
+- Named channels (except "LongFast") derive keys via SHA256(base_key + channel_name_utf8)
+- This matches Meshtastic firmware's key derivation algorithm
+
+### Topic Mapping
+
+When forwarding messages (mqtt_filter.py:157), the input topic prefix is replaced with the output topic prefix while preserving the rest of the topic structure. For example:
+- Input: `msh/US/NY/2/e/LongFast/!a1b2c3d4`
+- Input topic pattern: `msh/US/NY/#`
+- Output topic: `filtered/msh/US/NY`
+- Resulting topic: `filtered/msh/US/NY/2/e/LongFast/!a1b2c3d4`
+
+### Daemon Mode
+
+The daemon implementation (mqtt_filter.py:468-506) uses double-fork to properly detach from terminal and prevent zombies. It redirects stdout/stderr to /dev/null, so logging won't be visible unless redirected to a file.
+
+### Node Exemption
+
+The node exemption feature (mqtt_filter.py:55-79) allows bypassing the "Ok to MQTT" filtering for specific trusted node IDs:
+- Supports multiple node ID formats: `0xABCD1234` (hex with prefix), `ABCD1234` (hex without prefix), `!abcd1234` (Meshtastic format), or decimal
+- Node IDs are stored as a set for O(1) lookup performance
+- Exempt nodes are checked first in `_check_ok_to_mqtt` before any other filtering logic
+- Messages from exempt nodes are always forwarded, even if encrypted or missing the bitfield flag
+- Exempt message counts are tracked separately in statistics
