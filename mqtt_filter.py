@@ -7,9 +7,7 @@ Filters Meshtastic MQTT messages based on 'Ok to MQTT' flag
 import argparse
 import base64
 import hashlib
-import json
 import logging
-import struct
 import sys
 import time
 from typing import List, Optional
@@ -25,8 +23,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Default Meshtastic LongFast channel key
-DEFAULT_KEY = base64.b64decode("1PG7OiApB1nwvP+rz05pAQ==")
+# Default Meshtastic LongFast channel key (base64)
+DEFAULT_KEY_B64 = "1PG7OiApB1nwvP+rz05pAQ=="
 
 
 class MeshtasticMQTTFilter:
@@ -73,17 +71,17 @@ class MeshtasticMQTTFilter:
             self.reject_logger.propagate = False
             logger.info(f"Reject logging enabled: {reject_log_file}")
 
-        # Encryption keys
+        # Encryption keys (stored as base64 strings, decoded at decryption time)
         self.keys = []
         if decrypt_default:
-            self.keys.append(('default', DEFAULT_KEY))
+            self.keys.append(('default', DEFAULT_KEY_B64))
             logger.info("Encryption: Using default LongFast key")
 
         if channel_keys:
             for i, key_b64 in enumerate(channel_keys):
                 try:
-                    key = base64.b64decode(key_b64)
-                    self.keys.append((f'custom-{i}', key))
+                    base64.b64decode(key_b64)  # validate
+                    self.keys.append((f'custom-{i}', key_b64))
                     logger.info(f"Encryption: Added custom key #{i}")
                 except Exception as e:
                     logger.error(f"Failed to decode custom key #{i}: {e}")
@@ -154,12 +152,10 @@ class MeshtasticMQTTFilter:
                 logger.debug("Decoded: NOT PRESENT (encrypted)")
 
             # Try to decrypt if packet is encrypted
-            if not packet.HasField('decoded') and packet.HasField('encrypted'):
+            if packet.decoded.portnum == portnums_pb2.PortNum.UNKNOWN_APP and packet.encrypted:
                 logger.debug(f"Packet has encrypted data, attempting decryption with {len(self.keys)} key(s)")
                 if self.keys:
-                    # Get channel name from envelope for key derivation
-                    channel_name = envelope.channel_id if envelope.channel_id else ""
-                    decrypted = self._decrypt_packet(packet, channel_name)
+                    decrypted = self._attempt_decryption(packet, msg.topic)
                     if decrypted:
                         logger.debug(f"Decrypted packet from 0x{from_id:08x}")
                     else:
@@ -219,113 +215,121 @@ class MeshtasticMQTTFilter:
         logger.info(f"    - Bitfield disabled by user: {self.stats['rejected_bitfield_disabled']}")
         logger.info("=" * 60)
 
-    def _derive_key(self, base_key: bytes, channel_name: str) -> bytes:
+    @staticmethod
+    def _extract_channel_name_from_topic(topic: str) -> str:
+        """Extract channel name from MQTT topic for key derivation.
+
+        Topic format: msh/region/gateway_id/message_type/channel_name/gateway_hex
         """
-        Derive encryption key from channel name and base key.
-        This follows Meshtastic's key derivation algorithm.
+        try:
+            parts = topic.split("/")
+            if len(parts) >= 5:
+                candidate = parts[4]
+                if candidate not in ("e", "c") and not candidate.startswith("!"):
+                    return candidate
+        except Exception:
+            pass
+        return ""
 
-        Args:
-            base_key: Base encryption key
-            channel_name: Channel name for key derivation (empty for primary channel)
+    @staticmethod
+    def _derive_key(key_base64: str, channel_name: str) -> bytes:
+        """Derive encryption key from channel name and base64 key.
 
-        Returns:
-            32-byte encryption key
+        Follows Meshtastic's key derivation:
+        - Named channels: SHA256(key_bytes + channel_name_bytes)
+        - Primary channel (empty name): raw key bytes
         """
-        # If channel name is provided and not empty, derive key using SHA256
-        if channel_name and channel_name != "":
-            # Convert channel name to bytes
-            channel_bytes = channel_name.encode("utf-8")
-            # Create SHA256 hash of base key + channel name
-            hasher = hashlib.sha256()
-            hasher.update(base_key)
-            hasher.update(channel_bytes)
-            derived_key = hasher.digest()
-            return derived_key
-        else:
-            # For primary channel, use the key as-is
-            return base_key
+        try:
+            key_bytes = base64.b64decode(key_base64)
+            if channel_name:
+                hasher = hashlib.sha256()
+                hasher.update(key_bytes)
+                hasher.update(channel_name.encode("utf-8"))
+                return hasher.digest()
+            return key_bytes
+        except Exception as e:
+            logger.warning(f"Error deriving key: {e}")
+            return b"\x00" * 32
 
-    def _decrypt_packet(self, packet, channel_name: str = "") -> bool:
+    @staticmethod
+    def _decrypt_payload(encrypted_payload: bytes, packet_id: int, sender_id: int, key: bytes) -> bytes:
+        """Decrypt a Meshtastic packet payload using AES-CTR.
+
+        Returns decrypted bytes, or empty bytes on failure.
         """
-        Attempt to decrypt an encrypted packet using available keys.
+        try:
+            if not encrypted_payload:
+                return b""
+            nonce = packet_id.to_bytes(8, byteorder='little') + sender_id.to_bytes(8, byteorder='little')
+            cipher = Cipher(algorithms.AES(key), modes.CTR(nonce), backend=default_backend())
+            decryptor = cipher.decryptor()
+            return decryptor.update(encrypted_payload) + decryptor.finalize()
+        except Exception as e:
+            logger.debug(f"Decryption failed: {e}")
+            return b""
 
-        Args:
-            packet: The MeshPacket to decrypt
-            channel_name: Channel name for key derivation
+    def _try_decrypt_with_key(self, packet, key_base64: str, channel_name: str = "") -> bool:
+        """Try to decrypt a packet with a single key and channel name.
 
-        Returns:
-            True if decryption succeeded, False otherwise
+        Matches the pattern from mesh-mqtt-pg-collector/malla.
         """
-        if not packet.HasField('encrypted') or len(packet.encrypted) == 0:
-            logger.debug("Packet has no encrypted field or empty encrypted data")
+        # Already decoded?
+        if packet.decoded.portnum != portnums_pb2.PortNum.UNKNOWN_APP:
+            return False
+        if not packet.encrypted:
             return False
 
-        from_id = getattr(packet, 'from', 0)
+        encrypted_payload = packet.encrypted
         packet_id = packet.id
+        sender_id = getattr(packet, 'from', 0)
 
-        logger.debug(f"Attempting decryption: packet_id={packet_id}, from=0x{from_id:08x}, encrypted_len={len(packet.encrypted)}, channel={channel_name}")
-
-        # Meshtastic uses packet ID and from address as nonce
-        # Nonce = packet_id (8 bytes LE) + from_node (8 bytes LE) = 16 bytes total
-        packet_id_bytes = packet_id.to_bytes(8, byteorder='little')
-        sender_id_bytes = from_id.to_bytes(8, byteorder='little')
-        nonce = packet_id_bytes + sender_id_bytes
-
-        if len(nonce) != 16:
-            logger.warning(f"Invalid nonce length: {len(nonce)}, expected 16 bytes")
+        key = self._derive_key(key_base64, channel_name)
+        decrypted_payload = self._decrypt_payload(encrypted_payload, packet_id, sender_id, key)
+        if not decrypted_payload:
             return False
 
-        # Try each key — for each base key, try the base key directly first,
-        # then the derived key (SHA256(base_key + channel_name)). Preset channels
-        # like LongFast, MediumSlow, ShortFast etc. all use the base key directly,
-        # while user-named channels use the derived key.
-        for key_name, base_key in self.keys:
-            keys_to_try = [(base_key, "base")]
-            if channel_name and channel_name != "":
-                derived = self._derive_key(base_key, channel_name)
-                keys_to_try.append((derived, "derived"))
+        try:
+            decoded_data = mesh_pb2.Data()
+            decoded_data.ParseFromString(decrypted_payload)
 
-            for key_bytes, key_type in keys_to_try:
-                try:
-                    logger.debug(f"Trying key '{key_name}' ({key_type}) for channel '{channel_name}'")
+            if decoded_data.portnum == portnums_pb2.PortNum.UNKNOWN_APP:
+                return False
 
-                    # Create AES-CTR cipher using cryptography library
-                    cipher = Cipher(
-                        algorithms.AES(key_bytes),
-                        modes.CTR(nonce),
-                        backend=default_backend()
-                    )
-                    decryptor = cipher.decryptor()
+            packet.decoded.CopyFrom(decoded_data)
 
-                    # Decrypt the payload
-                    decrypted = decryptor.update(packet.encrypted) + decryptor.finalize()
+            portnum_name = portnums_pb2.PortNum.Name(decoded_data.portnum)
+            logger.debug(f"Decrypted packet {packet_id} from 0x{sender_id:08x}: {portnum_name}")
+            return True
+        except Exception as e:
+            logger.debug(f"Failed to parse decrypted payload: {e}")
+            return False
 
-                    logger.debug(f"Decrypted {len(decrypted)} bytes: {decrypted[:min(32, len(decrypted))].hex()}")
+    def _attempt_decryption(self, packet, topic: str) -> bool:
+        """Try all available keys to decrypt a packet.
 
-                    # Try to parse as Data protobuf
-                    data = mesh_pb2.Data()
-                    data.ParseFromString(decrypted)
+        Strategy (matching mesh-mqtt-pg-collector/malla):
+        1. Try each key with no channel derivation (primary channel).
+        2. Try each key with channel name derivation (from topic).
+        """
+        channel_name = self._extract_channel_name_from_topic(topic)
 
-                    # Validate that we actually got valid data
-                    if data.portnum == 0:
-                        logger.debug("Decrypted data has portnum=0 (UNKNOWN), likely wrong key")
-                        raise ValueError("Invalid portnum")
+        # Phase 1: try each key with no derivation (primary/preset channels)
+        for key_name, key_b64 in self.keys:
+            if self._try_decrypt_with_key(packet, key_b64, channel_name=""):
+                self.stats['decrypted'] += 1
+                logger.debug(f"Decrypted with key '{key_name}' (no derivation)")
+                return True
 
-                    # If we got here, decryption succeeded
-                    packet.decoded.CopyFrom(data)
-                    packet.ClearField('encrypted')
-
+        # Phase 2: try each key with channel name derivation
+        if channel_name:
+            for key_name, key_b64 in self.keys:
+                if self._try_decrypt_with_key(packet, key_b64, channel_name=channel_name):
                     self.stats['decrypted'] += 1
-                    logger.debug(f"Successfully decrypted packet from 0x{from_id:08x} using key '{key_name}' ({key_type})")
+                    logger.debug(f"Decrypted with key '{key_name}' (derived from '{channel_name}')")
                     return True
 
-                except Exception as e:
-                    logger.debug(f"Decryption failed with key '{key_name}' ({key_type}): {e}")
-                    continue
-
-        # None of the keys worked
         self.stats['decryption_failed'] += 1
-        logger.debug(f"Failed to decrypt packet from 0x{from_id:08x} with any available key")
+        logger.debug(f"Failed to decrypt packet with any available key")
         return False
 
     def _log_rejected_packet(self, reason: str, envelope: mqtt_pb2.ServiceEnvelope, packet, topic: str):
@@ -385,8 +389,8 @@ class MeshtasticMQTTFilter:
         """
         from_id = getattr(packet, 'from', 0)
 
-        # Check if the packet has decoded data
-        if not packet.HasField('decoded'):
+        # Check if the packet has decoded data (portnum UNKNOWN_APP means still encrypted)
+        if packet.decoded.portnum == portnums_pb2.PortNum.UNKNOWN_APP:
             self.stats['rejected_encrypted'] += 1
             logger.debug(f"REJECT 0x{from_id:08x}: encrypted")
             self._log_rejected_packet("Still encrypted after decryption attempts", envelope, packet, topic)
