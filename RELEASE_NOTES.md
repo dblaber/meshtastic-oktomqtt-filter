@@ -1,5 +1,21 @@
 # Release Notes
 
+## v1.1.0
+
+### Changes
+
+#### Removed: Node Exemption Feature
+- Removed the `--exempt-node` CLI argument and `EXEMPT_NODES` environment variable
+- The exempt-node feature bypassed the "Ok to MQTT" filter entirely for specified nodes, which undermined the purpose of the filter
+
+#### Fixed: Decryption for Non-LongFast Preset Channels
+- Fixed a bug where packets on preset channels other than LongFast (e.g., MediumSlow, ShortFast, LongModerate) would fail to decrypt
+- The decryption code previously hardcoded "LongFast" as the only channel name that skips SHA256 key derivation
+- All Meshtastic preset channels use the base key directly (no derivation), but only LongFast was recognized
+- Now tries the base key first, then the derived key for each encryption key, so all preset channels decrypt correctly
+
+---
+
 ## v1.0.0 - Initial Release
 
 ### Overview
@@ -95,8 +111,8 @@ python mqtt_filter.py --help
 #### Encryption Implementation
 - Uses `cryptography` library for AES-128-CTR decryption
 - Nonce construction: `packet_id (8 bytes LE) + sender_id (8 bytes LE)`
-- Key derivation: SHA256(base_key + channel_name) for custom channels
-- LongFast preset channels use base key directly (no derivation)
+- Key derivation: tries base key directly first, then SHA256(base_key + channel_name) for each key
+- All preset channels (LongFast, MediumSlow, etc.) use base key directly; user-named channels use derived keys
 
 #### Message Processing
 1. Parse Meshtastic ServiceEnvelope protobuf

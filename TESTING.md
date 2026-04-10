@@ -14,30 +14,20 @@ The test suite covers the following areas:
 - Custom encryption key handling
 - Reject logging configuration
 
-### 2. Exempt Node Functionality
-- **Multiple Format Support**: Tests parsing of node IDs in various formats
-  - Hex with prefix: `0x12345678`, `0xABCDEF01`
-  - Meshtastic format: `!12345678`, `!abcdef01`
-  - Decimal format: `305419896`
-- **Invalid Format Handling**: Gracefully handles invalid node ID formats
-- **Exemption Logic**: Verifies exempt nodes bypass all filtering rules
-- **Statistics Tracking**: Ensures exempt forwards are counted separately
-
-### 3. Message Filtering Logic
+### 2. Message Filtering Logic
 - **Bitfield Checking**:
   - Messages with "Ok to MQTT" bitfield (0x01) are forwarded
   - Messages without bitfield are rejected
   - `allow_no_bitfield` flag allows legacy firmware support
 - **Encryption Handling**: Encrypted packets without decoded data are rejected
-- **Exempt Node Bypass**: Exempt nodes are forwarded regardless of bitfield status
 
-### 4. Message Processing Pipeline
+### 3. Message Processing Pipeline
 - **End-to-End Processing**: Full message flow from MQTT input to filtered output
 - **Topic Mapping**: Input topic prefix correctly replaced with output prefix
 - **Statistics Tracking**: All message outcomes properly tracked
 - **Error Handling**: Malformed messages handled gracefully
 
-### 5. MQTT Connection Management
+### 4. MQTT Connection Management
 - **Connection Success**: Proper subscription on successful connection
 - **Connection Failure**: Graceful handling of connection failures
 - **Disconnection**: Both expected and unexpected disconnects handled
@@ -55,7 +45,6 @@ tests/
 │   └── default_longfast_key()   # Default encryption key
 ├── test_mqtt_filter.py          # Unit tests (200+ lines)
 │   ├── TestMeshtasticMQTTFilterInit
-│   ├── TestExemptNodes
 │   ├── TestCheckOkToMQTT
 │   ├── TestStatistics
 │   ├── TestCustomEncryptionKeys
@@ -98,13 +87,13 @@ pytest tests/test_mqtt_filter.py
 pytest tests/test_message_processing.py
 
 # Run a specific test class
-pytest tests/test_mqtt_filter.py::TestExemptNodes
+pytest tests/test_mqtt_filter.py::TestCheckOkToMQTT
 
 # Run a specific test
-pytest tests/test_mqtt_filter.py::TestExemptNodes::test_exempt_node_hex_format
+pytest tests/test_mqtt_filter.py::TestCheckOkToMQTT::test_packet_with_ok_to_mqtt_bitfield
 
 # Run tests matching a pattern
-pytest -k "exempt"
+pytest -k "bitfield"
 ```
 
 ### Coverage Reports
@@ -121,20 +110,7 @@ start htmlcov/index.html  # Windows
 
 ## Test Scenarios
 
-### Scenario 1: Exempt Node Message Forwarding
-
-**Test**: `test_forward_exempt_node_message`
-
-**Setup**:
-- Filter configured with exempt node `0x12345678`
-- Message from exempt node with bitfield disabled (0x00)
-
-**Expected**:
-- Message IS forwarded despite disabled bitfield
-- `forwarded_exempt` counter incremented
-- `forwarded` counter incremented
-
-### Scenario 2: Standard Message Filtering
+### Scenario 1: Standard Message Filtering
 
 **Test**: `test_forward_valid_message`
 
@@ -155,9 +131,8 @@ start htmlcov/index.html  # Windows
 
 **Expected**:
 - `total`: 4
-- `forwarded`: 3 (2 valid + 1 exempt)
-- `forwarded_exempt`: 1
-- `rejected_bitfield_disabled`: 1
+- `forwarded`: 2
+- `rejected_bitfield_disabled`: 2
 
 ## Continuous Integration
 

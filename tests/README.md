@@ -50,10 +50,10 @@ pytest tests/test_message_processing.py
 
 ```bash
 # Run a specific test class
-pytest tests/test_mqtt_filter.py::TestExemptNodes
+pytest tests/test_mqtt_filter.py::TestCheckOkToMQTT
 
 # Run a specific test function
-pytest tests/test_mqtt_filter.py::TestExemptNodes::test_exempt_node_hex_format
+pytest tests/test_mqtt_filter.py::TestCheckOkToMQTT::test_packet_with_ok_to_mqtt_bitfield
 ```
 
 ### Run with Verbose Output
@@ -73,7 +73,6 @@ pytest -vv -s
 ### Unit Tests (`test_mqtt_filter.py`)
 
 - **TestMeshtasticMQTTFilterInit**: Tests for initialization and configuration
-- **TestExemptNodes**: Tests for exempt node parsing and validation
 - **TestCheckOkToMQTT**: Tests for the authorization check logic
 - **TestStatistics**: Tests for statistics tracking
 - **TestCustomEncryptionKeys**: Tests for custom encryption key handling
@@ -87,14 +86,6 @@ pytest -vv -s
 
 ## Key Test Scenarios
 
-### Exempt Node Testing
-
-Tests verify that:
-- Nodes can be specified in multiple formats (0xABCD1234, !abcd1234, decimal)
-- Exempt nodes bypass all filtering rules
-- Invalid node IDs are handled gracefully
-- Statistics track exempt node forwards separately
-
 ### Message Filtering
 
 Tests verify that:
@@ -107,7 +98,6 @@ Tests verify that:
 
 Tests verify that:
 - All message outcomes are tracked correctly
-- Exempt node forwards are counted separately
 - Rejection reasons are categorized properly
 
 ## Writing New Tests

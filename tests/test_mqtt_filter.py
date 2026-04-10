@@ -76,106 +76,8 @@ class TestMeshtasticMQTTFilterInit:
         assert len(filter_service.keys) == 0
 
 
-class TestExemptNodes:
-    """Test exempt node functionality"""
-
-    @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_hex_format(self, mock_client_class, mqtt_filter_class):
-        """Test parsing exempt nodes in hex format"""
-        mock_client = Mock()
-        mock_client_class.return_value = mock_client
-
-        filter_service = mqtt_filter_class(
-            broker="test.mqtt.com",
-            port=1883,
-            input_topic="msh/test/#",
-            output_topic="filtered/test",
-            exempt_nodes=["0x12345678", "0xABCDEF01"]
-        )
-
-        assert 0x12345678 in filter_service.exempt_nodes
-        assert 0xABCDEF01 in filter_service.exempt_nodes
-        assert len(filter_service.exempt_nodes) == 2
-
-    @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_meshtastic_format(self, mock_client_class, mqtt_filter_class):
-        """Test parsing exempt nodes in Meshtastic format (!abcd1234)"""
-        mock_client = Mock()
-        mock_client_class.return_value = mock_client
-
-        filter_service = mqtt_filter_class(
-            broker="test.mqtt.com",
-            port=1883,
-            input_topic="msh/test/#",
-            output_topic="filtered/test",
-            exempt_nodes=["!12345678", "!abcdef01"]
-        )
-
-        assert 0x12345678 in filter_service.exempt_nodes
-        assert 0xABCDEF01 in filter_service.exempt_nodes
-
-    @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_decimal_format(self, mock_client_class, mqtt_filter_class):
-        """Test parsing exempt nodes in decimal format"""
-        mock_client = Mock()
-        mock_client_class.return_value = mock_client
-
-        filter_service = mqtt_filter_class(
-            broker="test.mqtt.com",
-            port=1883,
-            input_topic="msh/test/#",
-            output_topic="filtered/test",
-            exempt_nodes=["305419896"]  # 0x12345678 in decimal
-        )
-
-        assert 0x12345678 in filter_service.exempt_nodes
-
-    @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_invalid_format(self, mock_client_class, mqtt_filter_class):
-        """Test handling of invalid exempt node format"""
-        mock_client = Mock()
-        mock_client_class.return_value = mock_client
-
-        # Should not raise exception, just log error
-        filter_service = mqtt_filter_class(
-            broker="test.mqtt.com",
-            port=1883,
-            input_topic="msh/test/#",
-            output_topic="filtered/test",
-            exempt_nodes=["invalid", "0x12345678"]
-        )
-
-        # Valid node should still be added
-        assert 0x12345678 in filter_service.exempt_nodes
-        assert len(filter_service.exempt_nodes) == 1
-
-
 class TestCheckOkToMQTT:
     """Test the _check_ok_to_mqtt method"""
-
-    @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_bypasses_filter(self, mock_client_class, mqtt_filter_class):
-        """Test that exempt nodes bypass all filtering"""
-        mock_client = Mock()
-        mock_client_class.return_value = mock_client
-
-        filter_service = mqtt_filter_class(
-            broker="test.mqtt.com",
-            port=1883,
-            input_topic="msh/test/#",
-            output_topic="filtered/test",
-            exempt_nodes=["0x12345678"]
-        )
-
-        # Create a packet from exempt node (even without decoded data)
-        envelope = mqtt_pb2.ServiceEnvelope()
-        packet = mesh_pb2.MeshPacket()
-        setattr(packet, 'from', 0x12345678)
-
-        result = filter_service._check_ok_to_mqtt(envelope, packet)
-
-        assert result is True
-        assert filter_service.stats['forwarded_exempt'] == 1
 
     @patch('mqtt_filter.mqtt.Client')
     def test_packet_with_ok_to_mqtt_bitfield(self, mock_client_class, mqtt_filter_class):
@@ -320,30 +222,6 @@ class TestStatistics:
         assert filter_service.stats['rejected_bitfield_disabled'] == 0
         assert filter_service.stats['decrypted'] == 0
         assert filter_service.stats['decryption_failed'] == 0
-        assert filter_service.stats['forwarded_exempt'] == 0
-
-    @patch('mqtt_filter.mqtt.Client')
-    def test_exempt_node_statistics(self, mock_client_class, mqtt_filter_class):
-        """Test exempt node statistics are tracked"""
-        mock_client = Mock()
-        mock_client_class.return_value = mock_client
-
-        filter_service = mqtt_filter_class(
-            broker="test.mqtt.com",
-            port=1883,
-            input_topic="msh/test/#",
-            output_topic="filtered/test",
-            exempt_nodes=["0x12345678"]
-        )
-
-        envelope = mqtt_pb2.ServiceEnvelope()
-        packet = mesh_pb2.MeshPacket()
-        setattr(packet, 'from', 0x12345678)
-
-        # Check message from exempt node
-        filter_service._check_ok_to_mqtt(envelope, packet)
-
-        assert filter_service.stats['forwarded_exempt'] == 1
 
 
 class TestCustomEncryptionKeys:

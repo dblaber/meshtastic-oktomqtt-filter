@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Meshtastic MQTT filter service that processes Meshtastic mesh network messages from MQTT, filtering them based on the "Ok to MQTT" bitfield flag (firmware 2.5+), and forwarding only authorized messages to an output topic. The service can automatically decrypt encrypted packets using the default LongFast key or custom channel keys. It also supports exempting specific node IDs from filtering to always forward their messages regardless of the "Ok to MQTT" flag.
+This is a Meshtastic MQTT filter service that processes Meshtastic mesh network messages from MQTT, filtering them based on the "Ok to MQTT" bitfield flag (firmware 2.5+), and forwarding only authorized messages to an output topic. The service can automatically decrypt encrypted packets using the default LongFast key or custom channel keys.
 
 ## Architecture
 
@@ -31,16 +31,14 @@ The entire application is contained in `mqtt_filter.py` (480 lines). It implemen
      - Key derivation via SHA256(base_key + channel_name) for named channels
      - LongFast channel uses base key directly without derivation
 
-   - **Authorization Check** (_check_ok_to_mqtt, mqtt_filter.py:342-375):
-     - First checks if node ID is in the exempt list (bypasses all filtering)
+   - **Authorization Check** (_check_ok_to_mqtt):
      - Validates packet has decoded (non-encrypted) data
      - Checks bit 0 (0x01) of bitfield in decoded data
-     - Tracks rejection reasons and exemptions in statistics
+     - Tracks rejection reasons in statistics
 
 3. **Statistics Tracking** (mqtt_filter.py:96-106, 204-227):
    - Total messages, forwarded, rejected
    - Decryption success/failure counts
-   - Exempt node forward counts
    - Rejection reason breakdown (encrypted, no bitfield, bitfield disabled)
    - Periodic reporting every 10 messages or 30 seconds (with --show-stats)
 
@@ -97,13 +95,6 @@ python mqtt_filter.py \
   --output-topic "filtered/msh/US/NY" \
   --no-decrypt-default
 
-# Exempt specific nodes from filtering
-python mqtt_filter.py \
-  --broker mqtt.example.com \
-  --input-topic "msh/US/NY/#" \
-  --output-topic "filtered/msh/US/NY" \
-  --exempt-node "0x12345678" \
-  --exempt-node "!a1b2c3d4"
 ```
 
 ### Docker Development
@@ -143,7 +134,6 @@ Docker Compose uses environment variables (configure in `.env` file):
 - `SHOW_STATS`: Enable statistics output (default: true)
 - `DEBUG`: Enable debug logging (default: false)
 - `NO_DECRYPT_DEFAULT`: Disable default LongFast decryption (default: false)
-- `EXEMPT_NODES`: Comma-separated list of exempt node IDs (e.g., `0x12345678,!a1b2c3d4`)
 - `CHANNEL_KEYS`: Comma-separated list of base64 channel keys
 
 The entrypoint script (entrypoint.sh) parses these environment variables and converts them to command-line arguments.
@@ -169,10 +159,7 @@ Core dependencies (requirements.txt):
 
 ### Decryption Key Derivation
 
-The key derivation logic (mqtt_filter.py:199-223, 252-257) has special handling:
-- LongFast channel and empty channel names use the base key directly
-- Named channels (except "LongFast") derive keys via SHA256(base_key + channel_name_utf8)
-- This matches Meshtastic firmware's key derivation algorithm
+For each base key, decryption tries the base key directly first, then the derived key (SHA256(base_key + channel_name)). This handles both preset channels (LongFast, MediumSlow, ShortFast, etc.) which use the base key directly, and user-named channels which use derived keys.
 
 ### Topic Mapping
 
@@ -186,11 +173,3 @@ When forwarding messages (mqtt_filter.py:157), the input topic prefix is replace
 
 The daemon implementation (mqtt_filter.py:468-506) uses double-fork to properly detach from terminal and prevent zombies. It redirects stdout/stderr to /dev/null, so logging won't be visible unless redirected to a file.
 
-### Node Exemption
-
-The node exemption feature (mqtt_filter.py:55-79) allows bypassing the "Ok to MQTT" filtering for specific trusted node IDs:
-- Supports multiple node ID formats: `0xABCD1234` (hex with prefix), `ABCD1234` (hex without prefix), `!abcd1234` (Meshtastic format), or decimal
-- Node IDs are stored as a set for O(1) lookup performance
-- Exempt nodes are checked first in `_check_ok_to_mqtt` before any other filtering logic
-- Messages from exempt nodes are always forwarded, even if encrypted or missing the bitfield flag
-- Exempt message counts are tracked separately in statistics

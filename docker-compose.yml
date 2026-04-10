@@ -18,8 +18,6 @@ services:
       - NO_DECRYPT_DEFAULT=${NO_DECRYPT_DEFAULT:-false}
       - ALLOW_NO_BITFIELD=${ALLOW_NO_BITFIELD:-false}
       - REJECT_LOG_FILE=${REJECT_LOG_FILE:-}
-      # Comma-separated list of exempt node IDs (supports: 0xABCD1234, !a1b2c3d4, ABCD1234, or decimal)
-      - EXEMPT_NODES=${EXEMPT_NODES:-}
       # Comma-separated list of channel encryption keys (base64)
       - CHANNEL_KEYS=${CHANNEL_KEYS:-}
     volumes:

@@ -96,40 +96,6 @@ class TestMessageProcessing:
         assert filter_service.stats['rejected_bitfield_disabled'] == 1
 
     @patch('mqtt_filter.mqtt.Client')
-    def test_forward_exempt_node_message(self, mock_client_class, mqtt_filter_class):
-        """Test forwarding message from exempt node regardless of bitfield"""
-        mock_client = Mock()
-        mock_client_class.return_value = mock_client
-
-        filter_service = mqtt_filter_class(
-            broker="test.mqtt.com",
-            port=1883,
-            input_topic="msh/test/#",
-            output_topic="filtered/test",
-            exempt_nodes=["0x12345678"]
-        )
-
-        # Create envelope from exempt node with bitfield disabled
-        envelope = mqtt_pb2.ServiceEnvelope()
-        packet = mesh_pb2.MeshPacket()
-        setattr(packet, 'from', 0x12345678)
-        packet.decoded.portnum = 1
-        packet.decoded.bitfield = 0x00  # Ok to MQTT disabled, but node is exempt
-
-        envelope.packet.CopyFrom(packet)
-
-        mock_msg = Mock()
-        mock_msg.topic = "msh/test/2/e/LongFast/!12345678"
-        mock_msg.payload = envelope.SerializeToString()
-
-        filter_service.on_message(mock_client, None, mock_msg)
-
-        # Verify message WAS published despite disabled bitfield
-        assert mock_client.publish.called
-        assert filter_service.stats['forwarded_exempt'] == 1
-        assert filter_service.stats['forwarded'] == 1
-
-    @patch('mqtt_filter.mqtt.Client')
     def test_topic_mapping(self, mock_client_class, mqtt_filter_class):
         """Test that input topic prefix is correctly replaced with output prefix"""
         mock_client = Mock()
@@ -170,8 +136,7 @@ class TestMessageProcessing:
             broker="test.mqtt.com",
             port=1883,
             input_topic="msh/test/#",
-            output_topic="filtered/test",
-            exempt_nodes=["0xAAAAAAAA"]
+            output_topic="filtered/test"
         )
 
         # Process multiple messages with different outcomes
@@ -180,8 +145,8 @@ class TestMessageProcessing:
             (0x11111111, 0x01, True),
             # Disabled bitfield
             (0x22222222, 0x00, False),
-            # Exempt node
-            (0xAAAAAAAA, 0x00, True),
+            # Another disabled bitfield
+            (0xAAAAAAAA, 0x00, False),
             # Valid message
             (0x33333333, 0x01, True),
         ]
@@ -203,9 +168,8 @@ class TestMessageProcessing:
 
         # Verify statistics
         assert filter_service.stats['total'] == 4
-        assert filter_service.stats['forwarded'] == 3
-        assert filter_service.stats['forwarded_exempt'] == 1
-        assert filter_service.stats['rejected_bitfield_disabled'] == 1
+        assert filter_service.stats['forwarded'] == 2
+        assert filter_service.stats['rejected_bitfield_disabled'] == 2
 
 
 class TestConnectionHandling:

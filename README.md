@@ -7,7 +7,6 @@ Filters Meshtastic MQTT messages based on the "Ok to MQTT" flag, forwarding only
 - Filters messages based on the "Ok to MQTT" bitfield flag (firmware 2.5+)
 - Automatic decryption of encrypted packets with default LongFast key
 - Support for custom channel encryption keys
-- Node exemption - bypass filtering for specific trusted node IDs
 - Statistics tracking and periodic reporting
 - Daemon mode for background operation
 - Docker support for easy deployment
@@ -32,9 +31,6 @@ OUTPUT_TOPIC=filtered/msh/US/NY
 
 # Optional: Enable debug mode
 DEBUG=true
-
-# Optional: Exempt specific node IDs (comma-separated)
-EXEMPT_NODES=0x12345678,!a1b2c3d4,0xabcdef01
 
 # Optional: Add custom channel keys (comma-separated, base64)
 CHANNEL_KEYS=base64key1==,base64key2==
@@ -122,8 +118,6 @@ python mqtt_filter.py \
 - `--daemon`: Run as daemon in background
 - `--no-decrypt-default`: Disable decryption with default LongFast key
 - `--channel-key`: Add custom channel encryption key (base64), can be specified multiple times
-- `--exempt-node`: Exempt node ID from filtering (forwards all messages), can be specified multiple times
-  - Supported formats: `0xABCD1234`, `ABCD1234`, `!abcd1234`, or decimal
 
 ## How It Works
 
@@ -161,20 +155,6 @@ python mqtt_filter.py \
   --input-topic "msh/EU_868/#" \
   --output-topic "filtered/mesh" \
   --channel-key "your-base64-key-here=" \
-  --debug
-```
-
-### Exempt specific nodes from filtering
-
-Forward all messages from specific trusted nodes, regardless of their "Ok to MQTT" setting:
-
-```bash
-python mqtt_filter.py \
-  --broker mqtt.example.com \
-  --input-topic "msh/US/NY/#" \
-  --output-topic "filtered/mesh" \
-  --exempt-node "0x12345678" \
-  --exempt-node "!a1b2c3d4" \
   --debug
 ```
 

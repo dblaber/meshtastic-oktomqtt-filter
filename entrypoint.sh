@@ -51,18 +51,6 @@ if [ -n "$REJECT_LOG_FILE" ]; then
     ARGS+=("--reject-log" "$REJECT_LOG_FILE")
 fi
 
-# Parse comma-separated exempt nodes
-if [ -n "$EXEMPT_NODES" ]; then
-    IFS=',' read -ra NODES <<< "$EXEMPT_NODES"
-    for node in "${NODES[@]}"; do
-        # Trim whitespace
-        node=$(echo "$node" | xargs)
-        if [ -n "$node" ]; then
-            ARGS+=("--exempt-node" "$node")
-        fi
-    done
-fi
-
 # Parse comma-separated channel keys
 if [ -n "$CHANNEL_KEYS" ]; then
     IFS=',' read -ra KEYS <<< "$CHANNEL_KEYS"
